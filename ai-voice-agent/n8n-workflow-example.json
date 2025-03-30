@@ -1,0 +1,198 @@
+{
+  "name": "AI Voice Agent Outbound Call",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "make-outbound-call",
+        "options": {
+          "responseMode": "responseNode"
+        }
+      },
+      "id": "e21f9c92-2e75-4bcf-a79a-f74d51b6f34e",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the incoming request\nlet phoneNumber;\nlet customPrompt;\nlet firstMessage;\n\ntry {\n  // Extract data from the webhook payload\n  if (items[0].json.body) {\n    // If data is in the body property (common for POST requests)\n    const body = typeof items[0].json.body === 'string' \n      ? JSON.parse(items[0].json.body) \n      : items[0].json.body;\n    \n    phoneNumber = body.phoneNumber || body.number;\n    customPrompt = body.prompt || \"You are a friendly AI assistant making a phone call.\";\n    firstMessage = body.firstMessage || \"Hello, this is an automated call from an AI assistant.\";\n  } else {\n    // If data is directly in the json object\n    phoneNumber = items[0].json.phoneNumber || items[0].json.number;\n    customPrompt = items[0].json.prompt || \"You are a friendly AI assistant making a phone call.\";\n    firstMessage = items[0].json.firstMessage || \"Hello, this is an automated call from an AI assistant.\";\n  }\n  \n  // Validate phone number\n  if (!phoneNumber) {\n    throw new Error(\"Phone number is required\");\n  }\n  \n  // Format phone number if needed\n  if (!phoneNumber.startsWith(\"+\")) {\n    phoneNumber = \"+\" + phoneNumber;\n  }\n  \n  return [\n    {\n      json: {\n        phoneNumber,\n        customPrompt,\n        firstMessage,\n        success: true\n      }\n    }\n  ];\n} catch (error) {\n  return [\n    {\n      json: {\n        success: false,\n        error: error.message,\n        details: \"Failed to parse request data\"\n      }\n    }\n  ];\n}"
+      },
+      "id": "f1b9d5a3-d7c2-4e7e-b7ef-5b14d1e3b66a",
+      "name": "Parse Request Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c6b7d1ac-3716-4d98-9168-22678c2168a8",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "name": "filter.operator.equals",
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1c85da32-ccbe-4afa-b8d5-04e4a2fa36a7",
+      "name": "Valid Request?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        640,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WEBHOOK_BASE_URL }}/make-outbound-call",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "phoneNumber",
+              "value": "={{ $json.phoneNumber }}"
+            },
+            {
+              "name": "prompt",
+              "value": "={{ $json.customPrompt }}"
+            },
+            {
+              "name": "firstMessage",
+              "value": "={{ $json.firstMessage }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2a5e32f8-f8c3-4a33-8e30-d46e15d9e19c",
+      "name": "Initiate Call via API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        840,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": false,\n  \"error\": \"Invalid request\",\n  \"details\": \"{{ $json.error }}\"\n}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "1a36bd6c-7a69-481a-98b3-8d8c31c7d5e0",
+      "name": "Return Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        840,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $node[\"Initiate Call via API\"].json }}",
+        "options": {}
+      },
+      "id": "b9d2e3a7-f6d4-4a32-b2ef-b0df1c8f6d39",
+      "name": "Return Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1040,
+        340
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Parse Request Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Request Data": {
+      "main": [
+        [
+          {
+            "node": "Valid Request?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid Request?": {
+      "main": [
+        [
+          {
+            "node": "Initiate Call via API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initiate Call via API": {
+      "main": [
+        [
+          {
+            "node": "Return Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "meta": {
+    "instanceId": "YOUR_INSTANCE_ID"
+  },
+  "tags": []
+} 
